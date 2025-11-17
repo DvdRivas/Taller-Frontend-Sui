@@ -6,7 +6,23 @@ import { isValidSuiObjectId } from "@mysten/sui/utils";
 import { useNetworkVariable } from "./networkConfig";
 import { ConnectButton, useCurrentAccount } from "@mysten/dapp-kit";
 ```
+* useSuiClient()
+Crea un cliente conectado al RPC de Sui; se usa para inspecciones y consultas.
 
+* useSignAndExecuteTransaction()
+Permite firmar y enviar transacciones reales con la wallet conectada.
+
+* Transaction
+Constructor de bloques de transacción (Move calls, transferencias, etc.)
+
+* isValidSuiObjectId
+Utilidad para validar ObjectIDs (0x...).
+
+* useNetworkVariable
+ Utilidad personalizada para obtener valores de configuración según red (ej. packageId).
+
+* useCurrentAccount / ConnectButton
+Manejo de conexión de wallet y cuenta activa.
 # Variables 
 ```js
   const suiClient = useSuiClient()
@@ -22,6 +38,10 @@ import { ConnectButton, useCurrentAccount } from "@mysten/dapp-kit";
   const packageId = useNetworkVariable("PackageId");
   const modulo = "empresa"
 ```
+* suiClient Genera una instancia con el cliente de Sui.
+* cuenta Carga los detalles de la cuenta de slush, por ejemplo, el address.
+* signAndExecute Funcion para poder realizar la operacion de confirmar una transaccion. Vital para transacciones que modifican o escriben datos.
+* useStates Variables que al modificarse forzan una renderizacion de la pagina y permite mostrar los cambios realizados.
 
 # ClientCall
 ```js
@@ -318,3 +338,59 @@ import { ConnectButton, useCurrentAccount } from "@mysten/dapp-kit";
       };
   }
 ```
+La función ClientCall actúa como la capa de comunicación entre el frontend y los contratos Move desplegados en la blockchain de Sui. Su propósito es permitir que el frontend pueda ejecutar cualquier función Move —ya sea mutante o de solo lectura— sin necesidad de preocuparse por formatos, serialización, o detalles internos del BCS.
+
+En ClientCall abstrae toda la complejidad de Sui para que el resto del frontend pueda trabajar con funciones Move como si fueran llamadas JavaScript normales.
+
+## 1. Serialización automática de argumentos
+
+Move requiere que todos los argumentos enviados en un move_call estén correctamente codificados en formato BCS. ClientCall se encarga de convertir cualquier valor recibido desde el frontend en el tipo adecuado:
+* ObjectIDs → tx.object(id)
+* Strings → tx.pure.string
+* Booleans → tx.pure.bool
+* Números → tx.pure.u64 o el tipo explícito indicado
+* Tipos declarados manualmente → { type, value }
+
+## 2. Construcción del Move Call
+
+Una vez serializados los argumentos, ClientCall construye el bloque de transacción:
+
+```js
+tx.moveCall({
+  target: `${packageId}::${modulo}::${params.funcion}`,
+  arguments: args,
+});
+```
+
+## 3. Detección de funciones “solo lectura”
+Muchas funciones Move solo leen información y no modifican el estado; para este tipo de funciones no se necesita firmar transacciones ni pagar gas. ClientCall detecta si la función es de solo lectura mediante:
+
+Si la función es view:
+
+* Se ejecuta mediante devInspectTransactionBlock
+* No se pide firma al usuario
+* No se registra en la blockchain
+* Se obtiene el valor retornado directamente
+
+## 4. Ejecución de transacciones mutantes
+
+Si la función sí modifica el estado, entonces ClientCall:
+
+* Pide a la wallet que firme la transacción
+* La envía a la red
+* Espera a que se confirme
+* Decodifica los valores retornados, si los hay
+* Actualiza estados internos (por ejemplo, nuevos ObjectIDs creados)
+  
+Este flujo cubre todo el ciclo necesario para operaciones reales en Sui, como crear objetos, actualizarlos o eliminarlos.
+
+## 5. Decodificación de valores retornados (BCS → JavaScript)
+
+Sui devuelve todos los valores en formato BCS, incluso los strings. Por ello, ClientCall incluye un sistema avanzado de decodificación capaz de interpretar:
+
+* u8, u16, u32, u64
+* bool
+* String
+* vector<String>
+* enums y structs (como tu enum Nivel)
+* tuplas de múltiples valores
