@@ -1,5 +1,6 @@
 ![banner](./imagenes/banner.jpg)
 # Taller: Interacción con la blockchain de Sui desde el frontend
+> Nota, si haces fork a este repositorio, lo perimero que debes hacer es, en tu terminal, posicionarte en la carpeta frontend y usar el comando `npm install` para instalar las dependencias. Con eso, ya te sera posible correr el proyecto sin ningun problema.
 
 Sui es una plataforma de blockchain y contratos inteligentes de capa 1 diseñada para que la propiedad de activos digitales sea rápida, privada, segura y accesible.
 
